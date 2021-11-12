@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -39,7 +41,41 @@ const userSchema = new mongoose.Schema({
       }
     },
   },
+  tokens: [
+    {
+      token: {
+        type: String,
+        required: true,
+      },
+    },
+  ],
 });
+
+// .methods apply on Instance of Model
+// .statics apply on Model itself
+
+// Function to manipulate return JSON Object
+userSchema.methods.toJSON = function () {
+  const user = this;
+  const userObject = user.toObject();
+
+  delete userObject.password;
+  delete userObject.tokens;
+
+  return userObject;
+};
+
+// Function to Generate Token
+userSchema.methods.generateAuthToken = async function () {
+  const user = this;
+  const token = jwt.sign({ _id: user._id.toString() }, "thisissecretstring");
+
+  user.tokens = user.tokens.concat({ token });
+  // user.tokens.push({ token });
+  await user.save();
+
+  return token;
+};
 
 // Static Function to Verify Credentials
 userSchema.statics.findByCredentials = async (email, password) => {

@@ -1,5 +1,6 @@
 const express = require("express");
 const User = require("../models/User");
+const auth = require("../middlewares/authentication");
 const router = new express.Router();
 
 // Creating User
@@ -8,7 +9,8 @@ router.post("/users", async (req, res) => {
 
   try {
     await user.save();
-    res.status(201).send(user);
+    const token = await user.generateAuthToken();
+    res.status(201).send({ user, token });
   } catch (e) {
     res.status(400).send(e);
   }
@@ -31,20 +33,50 @@ router.post("/users/login", async (req, res) => {
       req.body.email,
       req.body.password
     );
-    res.send(user);
+    const token = await user.generateAuthToken();
+    res.send({ user, token });
   } catch (e) {
     res.status(400).send();
   }
 });
 
-// Reading all Users
-router.get("/users", async (req, res) => {
+// Logout User
+router.post("/users/logout", auth, async (req, res) => {
   try {
-    const users = await User.find({});
-    res.send(users);
-  } catch (e) {
-    res.status(500).send(e);
+    req.user.tokens = req.user.tokens.filter((t) => {
+      return t.token !== req.token;
+    });
+    await req.user.save();
+    res.send();
+  } catch (error) {
+    res.status(500).send();
   }
+});
+
+// Logout From Other Devices
+router.post("/users/logoutothers", auth, async (req, res) => {
+  try {
+    req.user.tokens = req.user.tokens.filter((t) => {
+      return t.token == req.token;
+    });
+    await req.user.save();
+    res.send();
+  } catch (error) {
+    res.status(500).send();
+  }
+});
+
+// Reading all Users
+router.get("/users/me", auth, async (req, res) => {
+  res.send(req.user);
+
+  // try {
+  //   const users = await User.find({});
+  //   res.send(users);
+  // } catch (e) {
+  //   res.status(500).send(e);
+  // }
+
   // User.find({})
   //   .then((users) => {
   //     res.send(users);
@@ -55,31 +87,31 @@ router.get("/users", async (req, res) => {
 });
 
 // Read specific User by id
-router.get("/users/:id", async (req, res) => {
-  const _id = req.params.id;
-  try {
-    const user = await User.findById(_id);
-    if (!user) {
-      return res.status(404).send();
-    }
-    res.send(user);
-  } catch (e) {
-    res.status(500).send(e);
-  }
-  // User.findById(_id)
-  //   .then((user) => {
-  //     if (!user) {
-  //       res.status(404).send();
-  //     }
-  //     res.send(user);
-  //   })
-  //   .catch((e) => {
-  //     res.status(500).send(e);
-  //   });
-});
+// router.get("/users/:id", async (req, res) => {
+//   const _id = req.params.id;
+//   try {
+//     const user = await User.findById(_id);
+//     if (!user) {
+//       return res.status(404).send();
+//     }
+//     res.send(user);
+//   } catch (e) {
+//     res.status(500).send(e);
+//   }
+//   // User.findById(_id)
+//   //   .then((user) => {
+//   //     if (!user) {
+//   //       res.status(404).send();
+//   //     }
+//   //     res.send(user);
+//   //   })
+//   //   .catch((e) => {
+//   //     res.status(500).send(e);
+//   //   });
+// });
 
 // Update User
-router.patch("/users/:id", async (req, res) => {
+router.patch("/users/me", auth, async (req, res) => {
   // Validating Update Properties
   const updates = Object.keys(req.body);
   const allowedUpdates = ["name", "email", "password", "age"];
@@ -91,7 +123,9 @@ router.patch("/users/:id", async (req, res) => {
   }
 
   try {
-    const user = await User.findById(req.params.id);
+    // const user = await User.findById(req.params.id);
+    const user = req.user;
+
     updates.forEach((update) => {
       user[update] = req.body[update];
     });
@@ -110,13 +144,14 @@ router.patch("/users/:id", async (req, res) => {
 });
 
 // Delete User
-router.delete("/users/:id", async (req, res) => {
+router.delete("/users/me", auth, async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) {
-      return res.status(404).send();
-    }
-    res.send(user);
+    // const user = await User.findByIdAndDelete(req.user._id);
+    // if (!user) {
+    //   return res.status(404).send();
+    // }
+    await req.user.remove();
+    res.send(req.user.name + "'s Profile Deleted Successfully!");
   } catch (error) {
     res.status(500).send(error);
   }
